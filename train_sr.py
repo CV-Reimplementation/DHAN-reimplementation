@@ -15,7 +15,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Resize, Normalize, CenterCrop, RandomCrop
 from tensorboardX import SummaryWriter
-from torchvision.utils import make_grid
+from torchvision.utils import make_grid, save_image
 
 from data import DatasetFromFolder
 from models.networks import ShadowRemoval, Discrimator
@@ -227,14 +227,14 @@ def main():
     for epoch in range(opt.epoch + 1):
 
         train(train_data_loader, netG, netD, optimizerG, optimizerD, epoch, logger = logger)
-        #test(test_data_loader, netG)
+        
         
         if epoch % opt.save_model_freq == 0:
           save_checkpoint(netG, epoch, name, opt)
           
         lr_schedulerG.step()
         lr_schedulerD.step()     
-    
+    test(test_data_loader, netG)
     logger.close() 
 
     
@@ -405,6 +405,8 @@ def test(test_data_loader, netG):
            Variable(batch[0]), \
            Variable(batch[1]), \
            Variable(batch[2], requires_grad=False)
+        
+        f_name = batch[3][0]
 
         if opt.cuda:
 
@@ -418,6 +420,8 @@ def test(test_data_loader, netG):
            data_shadow = data_shadow.cpu()
            
         predict_clean, predict_mask = netG(data_shadow)
+
+        save_image(predict_clean, os.path.join('result', f_name))
           
         with torch.no_grad():
 

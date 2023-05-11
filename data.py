@@ -122,7 +122,7 @@ class DatasetFromFolder(data.Dataset):
             shadow = self.transform(shadow)
             
         if self.experiments == "ShadowRemoval":
-          return shadow, mask, clean
+          return shadow, mask, clean, basename(self.clean_filenames[index])
         else:
           return clean, mask, shadow
 
