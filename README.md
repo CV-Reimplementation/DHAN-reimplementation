@@ -5,3 +5,4 @@ Edited from [NicoNico6](https://github.com/NicoNico6/ShadowRemoval)
 
 ## Fix Problems
 1. Remove Apex which is hard to install
+1. Use accelerate library to enable parallel training

@@ -1,9 +1,7 @@
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-from models.splat import SplAtConv2d
 
 class ConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, dilation = 1, bias = True, groups = 1, norm = 'in', nonlinear = 'relu'):
@@ -157,7 +155,7 @@ class Backbone(nn.Module):
       super(Backbone, self).__init__()
       
       if backbones == 'vgg16':
-        modules = (models.vgg16(pretrained = True).features[:-1])
+        modules = (models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1).features[:-1])
     
         self.block1 = modules[0:4]
         self.block2 = modules[4:9]
@@ -185,9 +183,9 @@ class Backbone(nn.Module):
         return torch.cat([(F.interpolate(item, size = (H, W), mode = 'bicubic') if sum(item.size()[2:]) != sum(x.size()[2:]) else item) for item in out], dim = 1).detach()
         
 
-class ShadowRemoval(nn.Module):
+class Model(nn.Module):
   def __init__(self, channels = 64):
-    super(ShadowRemoval, self).__init__()
+    super(Model, self).__init__()
     
     self.backbone = Backbone()
     
@@ -289,64 +287,11 @@ class ShadowRemoval(nn.Module):
     
     out_rgb = x.mul(alpha).add(out_rgb[:,:-1, :, :].mul(1 - alpha)).clamp(0,1)
     #out_rgb = out_rgb[:,:-1,:,:].clamp(0,1)
-    return out_rgb, out_mas.clamp(0,1)
-    
-    
-class Discrimator(nn.Module):
-  def __init__(self, in_channels, channels, depth):
-    super(Discrimator, self).__init__()
-    self.input_block = ConvLayer(in_channels = in_channels, out_channels = channels, kernel_size = 3, stride = 2, norm = None, nonlinear = 'PReLU')
-    self.residual_module = nn.ModuleList()
-    
-    for i in range(depth):
-      in_channels = channels*(2**i)
-      out_channels = channels*(2**(i+1))
-      self.residual_module.append(ResidualBlock(in_channels = in_channels, out_channels = out_channels, dilation = 1, stride = 2, attention = False, norm = 'in', nonlinear = 'PReLU'))
-    
-    self.out_block = nn.Conv2d(in_channels = channels*(2**(i+1)), out_channels = 1, kernel_size = 1)  
-  
-  def forward(self, input):
-    """
-    input_1:   NxCxHxW
-    input_2:   NxCxHxW
-    out
-    """
-    out = self.input_block(input)
-    for module in self.residual_module:
-      out = module(out)
-    
-    return torch.sigmoid(self.out_block(out))
+    return out_rgb, out_mas
 
-class ShadowMattingNet(nn.Module):
-  def __init__(self, channels = 64, depth = 9):
-    super(ShadowMattingNet, self).__init__()
-    
-    self.in_block = nn.Sequential(
-                      ConvLayer(4, channels, kernel_size = 7, stride = 1, norm = 'in', nonlinear = 'leakyrelu'),
-                      ConvLayer(channels, channels*2, kernel_size = 3, stride = 2, norm = 'in', nonlinear = 'leakyrelu'),
-                      ConvLayer(channels*2, channels*4, kernel_size = 3, stride = 2, norm = 'in', nonlinear = 'leakyrelu'),
-                      )
-    
-    self.residuals = nn.ModuleList()
-    
-    for i in range(depth):
-      self.residuals.append(ResidualBlock(in_channels = channels*4, out_channels = channels*4, dilation = 1, stride = 1, attention = False, nonlinear = 'leakyrelu'))
-    
-    self.out_block = nn.Sequential(
-                      nn.Upsample(scale_factor = 2, mode = 'bilinear'),
-                      ConvLayer(channels*4, channels*2, kernel_size = 3, stride = 1, norm = 'in', nonlinear = 'leakyrelu'),
-                      nn.Upsample(scale_factor = 2, mode = 'bilinear'),
-                      ConvLayer(channels*2, channels, kernel_size = 3, stride = 1, norm = 'in', nonlinear = 'leakyrelu'),
-                      nn.Conv2d(in_channels = channels, out_channels = 4, kernel_size = 7, padding = 3),
-                      )
-      
-  def forward(self, rgb, mask):
-    out = self.in_block(torch.cat((rgb, mask[:,0,:,:].unsqueeze(1)), dim = 1))
-    for module in self.residuals:
-      out = module(out)
-    out = self.out_block(out)[:,:,:rgb.size(2), :rgb.size(3)]
-    
-    alpha = torch.sigmoid(out[:,-1,:,:].unsqueeze(1))
-    out = rgb.mul(alpha).add(out[:,:-1, :, :].mul(1 - alpha)).clamp(0, 1)
-    return out
-    
+
+if __name__ == '__main__':
+   t = torch.randn(1, 3, 256, 256).cuda()
+   model = Model().cuda()
+   res, _ = model(t)
+   print(res.shape)
